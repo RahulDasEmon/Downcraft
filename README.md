@@ -53,7 +53,6 @@ Linux build deps: `libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-sha
 crates/core   download engine (no GUI): probe, segments, resume, queue, persistence
 crates/app    egui/eframe desktop UI  → binary `downcraft`
 assets/       logo
-docs/reference/  the IDM screenshots the UI was matched against
 ```
 
 ## Roadmap
