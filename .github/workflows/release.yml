@@ -1,0 +1,40 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64, bin: downcraft.exe }
+          - { os: macos-latest,   name: macos-arm64, bin: downcraft }
+          - { os: macos-13,       name: macos-x64,   bin: downcraft }
+          - { os: ubuntu-latest,  name: linux-x64,   bin: downcraft }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - run: cargo test -p downcraft-core
+      - run: cargo build --release -p downcraft-app
+      - name: Package portable zip
+        shell: bash
+        run: |
+          V=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          D=downcraft-$V-${{ matrix.name }}-portable
+          mkdir -p "$D/downcraft-data"
+          cp target/release/${{ matrix.bin }} "$D/"
+          cp README.md LICENSE "$D/"
+          if [ "$RUNNER_OS" = "Windows" ]; then 7z a "$D.zip" "$D"; else zip -r "$D.zip" "$D"; fi
+          echo "ZIP=$D.zip" >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.name }}", path: "${{ env.ZIP }}" }
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with: { files: "${{ env.ZIP }}" }
