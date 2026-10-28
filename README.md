@@ -300,36 +300,10 @@ assets/             logo, toolbar icons, screenshots
 
 MPEG-DASH · FTP · separate HLS audio tracks · custom categories · site grabber · proxy auto-config (PAC) scripts · a separate temporary folder for part files
 
-## 👨‍💻 Developer
-
-<table>
-<tr>
-<td width="150" align="center" valign="middle">
-<a href="https://github.com/RahulDasEmon">
-<img src="https://github.com/RahulDasEmon.png?size=240" width="120" alt="Rahul Das Emon">
-</a>
-</td>
-<td valign="middle">
-
-### Rahul Das Emon
-<sub><b>CREATOR & MAINTAINER OF DOWNCRAFT</b></sub>
-
-Designed and built in Rust, from the segmented download engine to the native UI.<br>
-Found a bug or have an idea? Open an issue or say hello on GitHub.
-
-[![GitHub](https://img.shields.io/badge/GitHub-RahulDasEmon-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RahulDasEmon)
-[![Followers](https://img.shields.io/github/followers/RahulDasEmon?style=for-the-badge&logo=github&label=Follow&color=2b7cd3)](https://github.com/RahulDasEmon)
-
-</td>
-</tr>
-</table>
-
-<sub>The same card lives inside the app: <b>Help → About DownCraft</b>.</sub>
 
 ## ⚖️ Legal
 
-DownCraft is an independent project, not affiliated with Tonec Inc. It contains no IDM code or assets.
-Released under the [MIT license](LICENSE).
+DownCraft is an independent project released under the [MIT license](LICENSE).
 
 ## ⭐ Star history
 
