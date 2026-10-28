@@ -1577,6 +1577,8 @@ pub fn about_ui(ctx: &egui::Context, logo: &TextureHandle, art: &AboutArt) -> Ou
 
 pub struct ExtensionDlg {
     pub path: Option<PathBuf>,
+    /// The unpacked extension folder for "Load unpacked" (only prepared where dragging is not possible).
+    pub folder: Option<PathBuf>,
     pub message: Option<(bool, String)>, // (is_error, text)
     /// Set when the logo was grabbed; `App::update` starts the native drag (it needs the window handle).
     pub drag: bool,
@@ -1586,16 +1588,27 @@ pub struct ExtensionDlg {
 
 impl ExtensionDlg {
     pub fn new(mgr: &Manager) -> Self {
-        match crate::extension::export(&mgr.data_dir().join("extension")) {
-            Ok(path) => ExtensionDlg { path: Some(path), message: None, drag: false, pinned: true },
-            Err(e) => ExtensionDlg { path: None, message: Some((true, format!("Could not prepare the extension: {e}"))), drag: false, pinned: true },
+        let dir = mgr.data_dir().join("extension");
+        match crate::extension::export(&dir) {
+            Ok(path) => {
+                let mut folder = None;
+                let mut message = None;
+                if !crate::extension::CAN_DRAG {
+                    match crate::extension::unpack(&dir) {
+                        Ok(f) => folder = Some(f),
+                        Err(e) => message = Some((true, format!("Could not unpack the extension: {e}"))),
+                    }
+                }
+                ExtensionDlg { path: Some(path), folder, message, drag: false, pinned: true }
+            }
+            Err(e) => ExtensionDlg { path: None, folder: None, message: Some((true, format!("Could not prepare the extension: {e}"))), drag: false, pinned: true },
         }
     }
 }
 
 pub fn extension_ui(ctx: &egui::Context, d: &mut ExtensionDlg, logo: &TextureHandle) -> Out<()> {
     let mut out = Out::Keep;
-    let closed = show_dialog_bare(ctx, "extension", "Browser extension", [520.0, 500.0], true, |ui| {
+    let closed = show_dialog_bare(ctx, "extension", "Browser extension", [520.0, if crate::extension::CAN_DRAG { 500.0 } else { 560.0 }], true, |ui| {
         if pin_button(ui, d.pinned) {
             d.pinned = !d.pinned;
             let level = if d.pinned { egui::WindowLevel::AlwaysOnTop } else { egui::WindowLevel::Normal };
@@ -1611,25 +1624,37 @@ pub fn extension_ui(ctx: &egui::Context, d: &mut ExtensionDlg, logo: &TextureHan
                 let r = r.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text(if crate::extension::CAN_DRAG {
                     "Drag me onto the chrome://extensions page"
                 } else {
-                    "Use \"Save zip as…\" below"
+                    "Dragging out of the window is not available here - use \"Load unpacked\""
                 });
                 if r.drag_started() && crate::extension::CAN_DRAG {
                     d.drag = true;
                 }
             }
             ui.add_space(4.0);
-            ui.label(RichText::new(crate::extension::FILE_NAME).strong().color(pal().strong));
             if crate::extension::CAN_DRAG {
+                ui.label(RichText::new(crate::extension::FILE_NAME).strong().color(pal().strong));
                 ui.label("Drag this logo onto the browser's extensions page to install.");
             } else {
-                ui.label("Save the zip, then drag it onto the browser's extensions page.");
+                ui.label(RichText::new(crate::extension::FOLDER_NAME).strong().color(pal().strong));
+                ui.label("Add this folder with \"Load unpacked\" on the browser's extensions page.");
             }
         });
         ui.add_space(10.0);
         card(ui, |ui| {
-            ui.label("1.  Open  chrome://extensions  (Edge: edge://extensions) and switch on Developer mode.");
-            ui.label("2.  Drag the logo above into that page - the extension installs itself.");
-            ui.label("3.  Keep DownCraft running; downloads from the browser then open here.");
+            if crate::extension::CAN_DRAG {
+                ui.label("1.  Open  chrome://extensions  (Edge: edge://extensions) and switch on Developer mode.");
+                ui.label("2.  Drag the logo above into that page - the extension installs itself.");
+                ui.label("3.  Keep DownCraft running; downloads from the browser then open here.");
+            } else {
+                ui.label("1.  Open  chrome://extensions  (Edge: edge://extensions) and switch on Developer mode.");
+                ui.label("2.  Click  Load unpacked  and choose the folder below (paste its path with Ctrl+L).");
+                ui.label("3.  Keep DownCraft running; downloads from the browser then open here.");
+                if let Some(f) = &d.folder {
+                    let t = f.display().to_string();
+                    ui.add_space(2.0);
+                    ui.add(egui::Label::new(RichText::new(&t).monospace().color(pal().muted)).truncate(true)).on_hover_text(t);
+                }
+            }
         });
         ui.add_space(6.0);
         if let Some((err, text)) = &d.message {
@@ -1658,6 +1683,22 @@ pub fn extension_ui(ctx: &egui::Context, d: &mut ExtensionDlg, logo: &TextureHan
                 }
             }
         });
+        if !crate::extension::CAN_DRAG {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.add_enabled(d.folder.is_some(), egui::Button::new("Copy folder path").min_size(vec2(88.0, 30.0))).clicked() {
+                    if let Some(f) = &d.folder {
+                        ui.output_mut(|o| o.copied_text = f.display().to_string());
+                        d.message = Some((false, "Folder path copied - paste it in the \"Load unpacked\" dialog.".into()));
+                    }
+                }
+                if ui.add_enabled(d.folder.is_some(), egui::Button::new("Open extension folder").min_size(vec2(88.0, 30.0))).clicked() {
+                    if let Some(f) = &d.folder {
+                        let _ = open::that(f);
+                    }
+                }
+            });
+        }
         pin_bottom(ui, 30.0);
         ui.vertical_centered(|ui| {
             if action_button(ui, "Close", true).clicked() {
@@ -1958,7 +1999,7 @@ pub fn setup_ui(ctx: &egui::Context, d: &mut SetupDlg, tb: &Arc<ToolBox>, extens
                     let r = r.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text(if crate::extension::CAN_DRAG {
                         "Drag me onto the browser's extensions page (chrome://extensions, Developer mode on)"
                     } else {
-                        "Use Install… to save the extension zip"
+                        "Use Install… to add the extension with Load unpacked"
                     });
                     if r.drag_started() && crate::extension::CAN_DRAG {
                         d.drag = true;
@@ -1969,7 +2010,7 @@ pub fn setup_ui(ctx: &egui::Context, d: &mut SetupDlg, tb: &Arc<ToolBox>, extens
                     (true, true) => (pal().good, "Connected · drag the logo to reinstall"),
                     (true, false) => (pal().good, "Connected"),
                     (false, true) => (pal().disabled, "Not connected · drag the logo to your browser"),
-                    (false, false) => (pal().disabled, "Not connected · use Install… to save the zip"),
+                    (false, false) => (pal().disabled, "Not connected · use Install… for the steps"),
                 };
                 ui.vertical(|ui| {
                     ui.set_width((ui.available_width() - 120.0).max(60.0));

@@ -178,7 +178,7 @@ flowchart LR
 <sub>Install all three from <b>Tasks → Tools</b>.</sub>
 </div>
 
-On first start, a **Set up DownCraft** window offers the extension (drag the logo onto `chrome://extensions`) and each helper tool with a *Get* button. Reopen it any time from **Tasks → Setup guide…**. More in [`crates/app/extension/README.md`](crates/app/extension/README.md).
+On first start, a **Set up DownCraft** window offers the extension (on Windows and macOS drag the logo onto `chrome://extensions`; on Linux use **Load unpacked** with the folder the window shows) and each helper tool with a *Get* button. Reopen it any time from **Tasks → Setup guide…**. More in [`crates/app/extension/README.md`](crates/app/extension/README.md).
 
 <br>
 
