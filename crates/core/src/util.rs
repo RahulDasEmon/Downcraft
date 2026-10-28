@@ -1,5 +1,21 @@
 use std::path::{Path, PathBuf};
 
+/// Downloads a small resource (an avatar, say) into memory through `client`: 15 s timeout, redirects
+/// followed, and at most `max` bytes accepted.
+pub fn fetch_small(client: &reqwest::blocking::Client, url: &str, max: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let resp = client.get(url).timeout(std::time::Duration::from_secs(15)).send().map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let mut buf = Vec::new();
+    resp.take(max as u64 + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    if buf.len() > max {
+        return Err("response too large".into());
+    }
+    Ok(buf)
+}
+
 pub fn now_ts() -> i64 {
     chrono::Local::now().timestamp()
 }

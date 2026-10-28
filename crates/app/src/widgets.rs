@@ -15,6 +15,11 @@ fn seen() -> MutexGuard<'static, Seen> {
     SEEN.get_or_init(|| Mutex::new((HashSet::new(), HashSet::new()))).lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// True while a pop-up window was drawn in the last finished frame.
+pub fn any_dialog_open() -> bool {
+    !seen().0.is_empty()
+}
+
 /// Call once at the end of every frame, after all dialogs were drawn. Returns true while any
 /// dialog window exists.
 pub fn finish_dialog_frame(ctx: &egui::Context) -> bool {

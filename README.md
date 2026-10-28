@@ -36,9 +36,9 @@ Up to **32 parallel connections** per file · safe resume · HLS streams · one-
 
 <div align="center">
 
-[![Watch the DownCraft intro video](assets/media/poster.jpg)](assets/media/downcraft-intro.mp4)
+[![Watch the DownCraft intro video](https://img.youtube.com/vi/RG9xaAKEFyo/maxresdefault.jpg)](https://youtu.be/RG9xaAKEFyo)
 
-<sub>▶ Click to play the 34-second intro (1080p).</sub>
+<sub>▶ Click to watch the intro on YouTube.</sub>
 
 </div>
 
@@ -265,7 +265,7 @@ One row, everything within reach, IDM-style. Want a different look? **Options �
 
 ## 📦 Install & build
 
-Download the latest build for your platform from the **[Releases](https://github.com/your-name/downcraft/releases/latest)** page. Each release ships a portable zip for Windows, macOS (Apple Silicon and Intel) and Linux.
+Download the latest build for your platform from the **[Releases](https://github.com/RahulDasEmon/Downcraft/releases/latest)** page. Each release ships a portable zip for Windows, macOS (Apple Silicon and Intel) and Linux.
 
 Or build from source:
 
@@ -293,17 +293,53 @@ sudo apt-get install libxkbcommon-dev libwayland-dev \
 crates/core         download engine (no GUI): probe, segments, resume, queue, persistence
 crates/app          egui / eframe desktop UI  →  binary `downcraft`
 crates/app/extension  Manifest V3 browser extension (packed into the app at build time)
-assets/             logo, toolbar icons, screenshots, intro video
+assets/             logo, toolbar icons, screenshots
 ```
 
 ## 🧭 Roadmap
 
 MPEG-DASH · FTP · separate HLS audio tracks · custom categories · site grabber · proxy auto-config (PAC) scripts · a separate temporary folder for part files
 
+## 👨‍💻 Developer
+
+<table>
+<tr>
+<td width="150" align="center" valign="middle">
+<a href="https://github.com/RahulDasEmon">
+<img src="https://github.com/RahulDasEmon.png?size=240" width="120" alt="Rahul Das Emon">
+</a>
+</td>
+<td valign="middle">
+
+### Rahul Das Emon
+<sub><b>CREATOR & MAINTAINER OF DOWNCRAFT</b></sub>
+
+Designed and built in Rust, from the segmented download engine to the native UI.<br>
+Found a bug or have an idea? Open an issue or say hello on GitHub.
+
+[![GitHub](https://img.shields.io/badge/GitHub-RahulDasEmon-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RahulDasEmon)
+[![Followers](https://img.shields.io/github/followers/RahulDasEmon?style=for-the-badge&logo=github&label=Follow&color=2b7cd3)](https://github.com/RahulDasEmon)
+
+</td>
+</tr>
+</table>
+
+<sub>The same card lives inside the app: <b>Help → About DownCraft</b>.</sub>
+
 ## ⚖️ Legal
 
 DownCraft is an independent project, not affiliated with Tonec Inc. It contains no IDM code or assets.
 Released under the [MIT license](LICENSE).
+
+## ⭐ Star history
+
+<a href="https://www.star-history.com/#RahulDasEmon/Downcraft&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=RahulDasEmon/Downcraft&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=RahulDasEmon/Downcraft&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=RahulDasEmon/Downcraft&type=Date" />
+  </picture>
+</a>
 
 <div align="center">
 <br>

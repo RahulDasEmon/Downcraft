@@ -119,6 +119,8 @@ fn menu_item(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
 pub struct App {
     mgr: Arc<Manager>,
     logo: TextureHandle,
+    /// Developer portrait for the About page: the live GitHub avatar.
+    dev: crate::dialogs::AboutArt,
     filter: Filter,
     open: [bool; 4],
     show_sidebar: bool,
@@ -193,6 +195,7 @@ impl App {
         Self::install_event_hook(&mgr, after_pending.clone());
         let toolbox = downcraft_core::tools::ToolBox::new(mgr.clone());
         let pinned = mgr.settings.lock().pin_main;
+        let dev = crate::dialogs::AboutArt::new(&cc.egui_ctx, mgr.data_dir().join("developer.png"), crate::LOGO);
         {
             // theme and accent colour chosen in an earlier session
             let st = mgr.settings.lock();
@@ -201,6 +204,7 @@ impl App {
         App {
             mgr,
             logo,
+            dev,
             filter: Filter::All(None),
             open: [true, false, false, false], // like IDM: only "All Downloads" starts expanded,
             show_sidebar: true,
@@ -1502,7 +1506,7 @@ impl App {
             }
         }
         if self.about {
-            if let Out::Close = about_ui(ctx, &self.logo) {
+            if let Out::Close = about_ui(ctx, &self.logo, &self.dev) {
                 self.about = false;
             }
         }
@@ -1535,6 +1539,11 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        // developer portrait on the About page: refresh from GitHub when the page is open
+        self.dev.poll(ctx);
+        if self.about {
+            self.dev.refresh(ctx, &self.mgr);
+        }
         // restore the pinned state saved by the last run
         if !self.pin_sent {
             self.pin_sent = true;
@@ -1552,7 +1561,18 @@ impl eframe::App for App {
         }
         if ctx.input(|i| i.viewport().close_requested()) && want_tray && self.tray.is_some() && !self.quitting.load(Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            let popups = !self.confirms.is_empty()
+                || !self.progresses.is_empty()
+                || !self.completes.is_empty()
+                || crate::widgets::any_dialog_open();
+            if popups {
+                // Hiding the window would stop this update loop and freeze the open pop-ups
+                // (they could no longer be moved, minimised or closed). Park it off-screen
+                // instead; it is hidden for real once the last pop-up has been closed.
+                crate::tray::park_for_dialogs();
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            }
         }
         // launched by the OS at login with "Start minimized": go to the tray (or the taskbar)
         if !self.start_checked {

@@ -729,6 +729,7 @@ pub fn complete_ui(ctx: &egui::Context, mgr: &Arc<Manager>, d: &mut Complete) ->
                 if let Some(dir) = d.path.parent() {
                     let _ = open::that(dir);
                 }
+                out = Out::Close; // the folder is open: this pop-up has done its job
             }
             if action_button(ui, "Open with…", false).clicked() {
                 if let Some(app) = rfd::FileDialog::new().set_title("Open with…").pick_file() {
@@ -1221,23 +1222,349 @@ pub fn notice_ui(ctx: &egui::Context, title: &str, message: &str) -> Out<()> {
     }
 }
 
-pub fn about_ui(ctx: &egui::Context, logo: &TextureHandle) -> Out<()> {
+// ───────────────────── About: developer card ─────────────────────
+
+const DEV_NAME: &str = "Rahul Das Emon";
+const DEV_HANDLE: &str = "@RahulDasEmon";
+const DEV_URL: &str = "https://github.com/RahulDasEmon";
+/// The portrait is the developer's live GitHub avatar: change it on GitHub and it changes here too.
+const DEV_AVATAR_URL: &str = "https://github.com/RahulDasEmon.png?size=256";
+/// Project links of the About page. An empty address shows that button dimmed, as "SOON".
+const PROJECT_URL: &str = "https://github.com/RahulDasEmon/Downcraft";
+const DISCORD_URL: &str = ""; // paste the Discord invite here, e.g. "https://discord.gg/xxxxxxx"
+
+/// Pictures of the About page: the developer portrait (starts from the copy cached on disk, or the
+/// app logo on a first, offline run, and refreshes itself from GitHub in the background) and
+/// the brand icons of the link buttons.
+pub struct AboutArt {
+    pub texture: TextureHandle,
+    github: TextureHandle,
+    discord: TextureHandle,
+    shown: Vec<u8>,
+    cache: PathBuf,
+    rx: Option<std::sync::mpsc::Receiver<Vec<u8>>>,
+    next_try: std::time::Instant,
+}
+
+impl AboutArt {
+    pub fn new(ctx: &egui::Context, cache: PathBuf, fallback: &[u8]) -> Self {
+        let shown = std::fs::read(&cache)
+            .ok()
+            .filter(|b| image::load_from_memory(b).is_ok())
+            .unwrap_or_else(|| fallback.to_vec());
+        let texture = circular_texture(ctx, "developer", &shown, 256);
+        let github = icon_texture(ctx, "icon-github", crate::ICON_GITHUB);
+        let discord = icon_texture(ctx, "icon-discord", crate::ICON_DISCORD);
+        AboutArt { texture, github, discord, shown, cache, rx: None, next_try: std::time::Instant::now() }
+    }
+
+    /// Fetches the current GitHub avatar in the background (at most once every 10 minutes; a failed
+    /// attempt is retried after one). Uses the app's own HTTP client, so the proxy settings apply.
+    pub fn refresh(&mut self, ctx: &egui::Context, mgr: &Manager) {
+        if self.rx.is_some() || std::time::Instant::now() < self.next_try {
+            return;
+        }
+        self.next_try = std::time::Instant::now() + std::time::Duration::from_secs(600);
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.rx = Some(rx);
+        let (client, cache, ctx) = (mgr.client(), self.cache.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let Ok(bytes) = util::fetch_small(&client, DEV_AVATAR_URL, 4 << 20) else { return };
+            if image::load_from_memory(&bytes).is_err() {
+                return; // not a picture (an error page, say): keep what we have
+            }
+            if let Some(dir) = cache.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let tmp = cache.with_extension("tmp");
+            if std::fs::write(&tmp, &bytes).is_ok() {
+                let _ = std::fs::rename(&tmp, &cache);
+            }
+            let _ = tx.send(bytes);
+            ctx.request_repaint();
+        });
+    }
+
+    /// Call every frame: swaps in a freshly downloaded avatar once it has arrived.
+    pub fn poll(&mut self, ctx: &egui::Context) {
+        let Some(rx) = &self.rx else { return };
+        match rx.try_recv() {
+            Ok(bytes) => {
+                if bytes != self.shown {
+                    self.texture = circular_texture(ctx, "developer", &bytes, 256);
+                    self.shown = bytes;
+                }
+                self.rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.rx = None; // the download failed: try again a minute from now
+                self.next_try = std::time::Instant::now() + std::time::Duration::from_secs(60);
+            }
+        }
+    }
+}
+
+fn icon_texture(ctx: &egui::Context, name: &str, bytes: &[u8]) -> TextureHandle {
+    let img = image::load_from_memory(bytes).map(|i| i.to_rgba8()).unwrap_or_else(|_| image::RgbaImage::new(1, 1));
+    let (w, h) = img.dimensions();
+    ctx.load_texture(name, egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw()), egui::TextureOptions::LINEAR)
+}
+
+/// Decodes an embedded picture, centre-crops it to a square and cuts it into an anti-aliased circle.
+/// A picture that cannot be decoded becomes a plain disc instead of crashing the About page.
+pub fn circular_texture(ctx: &egui::Context, name: &str, bytes: &[u8], size: u32) -> TextureHandle {
+    let src = image::load_from_memory(bytes)
+        .map(|i| i.to_rgba8())
+        .unwrap_or_else(|_| image::RgbaImage::from_pixel(size, size, image::Rgba([90, 70, 170, 255])));
+    let (w, h) = src.dimensions();
+    let side = w.min(h).max(1);
+    let square = image::imageops::crop_imm(&src, (w - side) / 2, (h - side) / 2, side, side).to_image();
+    let mut img = image::imageops::resize(&square, size, size, image::imageops::FilterType::Lanczos3);
+    let r = size as f32 / 2.0;
+    for (x, y, px) in img.enumerate_pixels_mut() {
+        let d = ((x as f32 + 0.5 - r).powi(2) + (y as f32 + 0.5 - r).powi(2)).sqrt();
+        px.0[3] = (px.0[3] as f32 * (r - d).clamp(0.0, 1.0)) as u8; // 1 px soft edge
+    }
+    ctx.load_texture(
+        name,
+        egui::ColorImage::from_rgba_unmultiplied([size as usize, size as usize], img.as_raw()),
+        egui::TextureOptions::LINEAR,
+    )
+}
+
+/// Linear blend of two colours (`t` = 0 gives `a`, 1 gives `b`).
+fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t.clamp(0.0, 1.0)).round() as u8;
+    egui::Color32::from_rgba_premultiplied(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()), l(a.a(), b.a()))
+}
+
+/// A rectangle with rounded top corners filled with a left-to-right gradient that fades towards the bottom.
+fn gradient_banner(painter: &egui::Painter, rect: Rect, radius: f32, left: egui::Color32, right: egui::Color32) {
+    use std::f32::consts::PI;
+    let mut pts: Vec<egui::Pos2> = Vec::new();
+    for (centre, from) in [
+        (rect.left_top() + vec2(radius, radius), PI),
+        (rect.right_top() + vec2(-radius, radius), 1.5 * PI),
+    ] {
+        for i in 0..=8 {
+            let a = from + i as f32 * (PI / 2.0) / 8.0;
+            pts.push(centre + radius * vec2(a.cos(), a.sin()));
+        }
+    }
+    pts.push(rect.right_bottom());
+    pts.push(rect.left_bottom());
+    let colour = |p: egui::Pos2| {
+        let tx = ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
+        let ty = ((p.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
+        mix(left, right, tx).gamma_multiply(1.0 - 0.55 * ty)
+    };
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(rect.center(), colour(rect.center()));
+    for p in &pts {
+        mesh.colored_vertex(*p, colour(*p));
+    }
+    let n = pts.len() as u32;
+    for i in 0..n {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+/// `──── LABEL ────`
+fn section_divider(ui: &mut egui::Ui, label: &str) {
+    let p = pal();
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 16.0), Sense::hover());
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), FontId::proportional(10.5), p.muted);
+    let (c, w) = (rect.center(), galley.size().x);
+    let line = Stroke::new(1.0, p.hairline);
+    ui.painter().line_segment([pos2(rect.left() + 4.0, c.y), pos2(c.x - w / 2.0 - 10.0, c.y)], line);
+    ui.painter().line_segment([pos2(c.x + w / 2.0 + 10.0, c.y), pos2(rect.right() - 4.0, c.y)], line);
+    ui.painter().galley(pos2(c.x - w / 2.0, c.y - galley.size().y / 2.0), galley, p.muted);
+}
+
+/// The developer's business card: gradient banner, a portrait inside an orbiting comet ring, name,
+/// a pulsing "DEVELOPER" chip and a link to the GitHub profile.
+fn developer_card(ui: &mut egui::Ui, photo: &TextureHandle) {
+    use std::f32::consts::PI;
+    let p = pal();
+    let violet = egui::Color32::from_rgb(150, 96, 255);
+    let pink = egui::Color32::from_rgb(244, 98, 170);
+    let white = egui::Color32::WHITE;
+    let time = ui.input(|i| i.time) as f32;
+    ui.ctx().request_repaint_after(std::time::Duration::from_millis(16)); // keeps the ring turning
+
+    let (card, _) = ui.allocate_exact_size(vec2(ui.available_width(), 282.0), Sense::hover());
+    let painter = ui.painter().clone();
+    painter.rect(card, Rounding::same(14.0), p.card_bg, Stroke::new(1.0, p.card_stroke));
+
+    // ── banner: gradient, dot grid, two soft bubbles ──
+    let banner = Rect::from_min_size(card.min + vec2(1.0, 1.0), vec2(card.width() - 2.0, 77.0));
+    gradient_banner(&painter, banner, 13.0, p.accent.gamma_multiply(0.80), violet.gamma_multiply(0.80));
+    let clip = painter.with_clip_rect(banner);
+    clip.circle_filled(banner.left_top() + vec2(62.0, 30.0), 34.0, white.gamma_multiply(0.07));
+    clip.circle_filled(banner.right_top() + vec2(-66.0, 54.0), 46.0, white.gamma_multiply(0.06));
+    let mut y = banner.top() + 12.0;
+    while y < banner.bottom() - 6.0 {
+        let mut x = banner.left() + 20.0;
+        while x < banner.right() - 16.0 {
+            clip.circle_filled(pos2(x, y), 1.1, white.gamma_multiply(0.22));
+            x += 14.0;
+        }
+        y += 14.0;
+    }
+
+    // ── portrait ──
+    let centre = pos2(card.center().x, card.top() + 78.0);
+    let avatar_hit = Rect::from_center_size(centre, vec2(104.0, 104.0));
+    let av = ui.interact(avatar_hit, ui.make_persistent_id("dev-avatar"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    let lift = ui.ctx().animate_bool_with_time(av.id, av.hovered(), 0.18);
+
+    for k in 0..7 {
+        // soft halo
+        painter.circle_filled(centre, 82.0 - k as f32 * 3.5, p.accent.gamma_multiply(0.035));
+    }
+    painter.circle_filled(centre, 60.0, p.card_bg); // cut-out into the banner
+    painter.circle_stroke(centre, 60.0, Stroke::new(1.0, p.accent.gamma_multiply(0.22))); // satellite orbit
+    let ring_r = 52.0;
+    painter.circle_stroke(centre, ring_r, Stroke::new(3.5, p.accent.gamma_multiply(0.16))); // ring track
+    let photo_r = 44.0 + 2.5 * lift;
+    painter.image(
+        photo.id(),
+        Rect::from_center_size(centre, vec2(photo_r * 2.0, photo_r * 2.0)),
+        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+        white,
+    );
+    // comet: a tail that fades in over 270° and ends in a bright head
+    let head = time * (2.2 + 2.0 * lift);
+    let span = 1.5 * PI;
+    let steps = 96;
+    let at = |a: f32, r: f32| centre + r * vec2(a.cos(), a.sin());
+    let mut prev = at(head - span, ring_r);
+    for i in 1..=steps {
+        let f = i as f32 / steps as f32;
+        let pt = at(head - span * (1.0 - f), ring_r);
+        let col = mix(violet, p.accent, f).gamma_multiply(f.powf(1.3));
+        painter.line_segment([prev, pt], Stroke::new(4.0, col));
+        prev = pt;
+    }
+    painter.circle_filled(prev, 10.0, p.accent.gamma_multiply(0.20));
+    painter.circle_filled(prev, 5.0, white);
+    // satellite on the outer orbit, going the other way
+    let sat = at(1.0 - time * 1.1, 60.0);
+    painter.circle_filled(sat, 6.0, pink.gamma_multiply(0.25));
+    painter.circle_filled(sat, 3.0, pink);
+
+    // ── name, handle ──
+    painter.text(pos2(card.center().x, card.top() + 144.0), Align2::CENTER_TOP, DEV_NAME, FontId::proportional(22.0), p.strong);
+    painter.text(pos2(card.center().x, card.top() + 174.0), Align2::CENTER_TOP, DEV_HANDLE, FontId::proportional(13.0), p.muted);
+
+    // ── "DEVELOPER" chip with a pulsing dot ──
+    let g = painter.layout_no_wrap("DEVELOPER".to_owned(), FontId::proportional(10.5), p.accent);
+    let chip = Rect::from_center_size(pos2(card.center().x, card.top() + 211.0), vec2(g.size().x + 34.0, 22.0));
+    painter.rect(chip, Rounding::same(11.0), p.accent.gamma_multiply(0.14), Stroke::new(1.0, p.accent.gamma_multiply(0.45)));
+    let dot = pos2(chip.left() + 12.0, chip.center().y);
+    let pulse = 0.5 + 0.5 * (time * 3.0).sin();
+    painter.circle_filled(dot, 3.0 + 3.0 * pulse, p.accent.gamma_multiply(0.30 * (1.0 - pulse)));
+    painter.circle_filled(dot, 2.6, p.accent);
+    painter.galley(pos2(chip.left() + 22.0, chip.center().y - g.size().y / 2.0), g, p.accent);
+
+    // ── GitHub button ──
+    let btn = Rect::from_center_size(pos2(card.center().x, card.top() + 250.0), vec2(184.0, 32.0));
+    let br = ui.interact(btn, ui.make_persistent_id("dev-github"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    let br = br.on_hover_text(DEV_URL);
+    let hot = ui.ctx().animate_bool_with_time(br.id, br.hovered(), 0.12);
+    painter.rect_filled(btn, Rounding::same(16.0), mix(p.accent, p.accent_hover, hot));
+    let label = painter.layout_no_wrap("View GitHub profile".to_owned(), FontId::proportional(13.0), p.on_accent);
+    let total = label.size().x + 6.0 + 9.0;
+    let x0 = btn.center().x - total / 2.0;
+    painter.galley(pos2(x0, btn.center().y - label.size().y / 2.0), label.clone(), p.on_accent);
+    // little "↗" arrow that nudges on hover (drawn, so it does not depend on a font glyph)
+    let a = pos2(x0 + label.size().x + 6.0 + 1.0 * hot, btn.center().y);
+    let ink = Stroke::new(1.6, p.on_accent);
+    painter.line_segment([a + vec2(0.0, 4.0), a + vec2(8.0, -4.0)], ink);
+    painter.line_segment([a + vec2(2.0, -4.0), a + vec2(8.0, -4.0)], ink);
+    painter.line_segment([a + vec2(8.0, -4.0), a + vec2(8.0, 2.0)], ink);
+
+    if av.clicked() || br.clicked() {
+        let _ = open::that(DEV_URL);
+    }
+}
+
+/// A pill with a brand icon and a label. On hover it floods with the brand colour. Without an
+/// address (`url` empty) it is dimmed, carries a "SOON" tag and does nothing.
+fn social_button(ui: &mut egui::Ui, rect: Rect, icon: &TextureHandle, label: &str, url: &str, brand: egui::Color32, on_brand: egui::Color32) {
+    let p = pal();
+    let live = !url.is_empty();
+    let id = ui.make_persistent_id(("social", label));
+    let r = ui.interact(rect, id, if live { Sense::click() } else { Sense::hover() });
+    let r = if live {
+        r.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(url)
+    } else {
+        r.on_hover_text(format!("{label} link coming soon"))
+    };
+    let hot = ui.ctx().animate_bool_with_time(id, live && r.hovered(), 0.14);
+    let painter = ui.painter();
+    let fill = mix(p.btn_bg, brand, hot);
+    let edge = mix(p.card_stroke, brand, hot);
+    let ink = if live { mix(p.text2, on_brand, hot) } else { p.muted.gamma_multiply(0.75) };
+    painter.rect(rect, Rounding::same(rect.height() / 2.0), fill, Stroke::new(1.0, edge));
+
+    let text = painter.layout_no_wrap(label.to_owned(), FontId::proportional(13.0), ink);
+    let soon = (!live).then(|| painter.layout_no_wrap("SOON".to_owned(), FontId::proportional(8.5), p.muted));
+    let soon_w = soon.as_ref().map_or(0.0, |g| g.size().x + 12.0 + 6.0);
+    let total = 16.0 + 8.0 + text.size().x + soon_w;
+    let mut x = rect.center().x - total / 2.0 - 0.0;
+    let lift = -1.0 * hot; // the icon hops up a pixel on hover
+    painter.image(
+        icon.id(),
+        Rect::from_min_size(pos2(x, rect.center().y - 8.0 + lift), vec2(16.0, 16.0)),
+        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+        ink,
+    );
+    x += 16.0 + 8.0;
+    painter.galley(pos2(x, rect.center().y - text.size().y / 2.0), text.clone(), ink);
+    if let Some(g) = soon {
+        let chip = Rect::from_min_size(pos2(x + text.size().x + 6.0, rect.center().y - 7.0), vec2(g.size().x + 12.0, 14.0));
+        painter.rect(chip, Rounding::same(7.0), p.muted.gamma_multiply(0.12), Stroke::new(1.0, p.muted.gamma_multiply(0.30)));
+        painter.galley(pos2(chip.left() + 6.0, chip.center().y - g.size().y / 2.0), g, p.muted);
+    }
+    if r.clicked() {
+        let _ = open::that(url);
+    }
+}
+
+pub fn about_ui(ctx: &egui::Context, logo: &TextureHandle, art: &AboutArt) -> Out<()> {
     let mut out = Out::Keep;
-    let closed = show_dialog_bare(ctx, "about", "About DownCraft", [420.0, 290.0], false, |ui| {
+    let closed = show_dialog_bare(ctx, "about", "About DownCraft", [440.0, 572.0], false, |ui| {
         ui.vertical_centered(|ui| {
-            ui.add_space(4.0);
-            ui.add(egui::Image::new(logo).fit_to_exact_size(vec2(72.0, 72.0)));
-            ui.add_space(4.0);
+            ui.add_space(2.0);
+            ui.add(egui::Image::new(logo).fit_to_exact_size(vec2(60.0, 60.0)));
+            ui.add_space(2.0);
             ui.label(RichText::new(format!("DownCraft {}", env!("CARGO_PKG_VERSION"))).size(18.0).strong().color(pal().strong));
             ui.label(RichText::new("A free, open-source, multi-connection download manager.").color(pal().muted));
             ui.label(RichText::new("Pure Rust. Windows · macOS · Linux.").color(pal().muted));
         });
-        pin_bottom(ui, 30.0);
-        ui.vertical_centered(|ui| {
-            if action_button(ui, "Close", true).clicked() {
-                out = Out::Close;
-            }
-        });
+        ui.add_space(10.0);
+        section_divider(ui, "CRAFTED BY");
+        ui.add_space(8.0);
+        developer_card(ui, &art.texture);
+
+        // links, pinned to the bottom (the window's own × and Esc close the page)
+        pin_bottom(ui, 16.0 + 10.0 + 36.0);
+        section_divider(ui, "CONNECT");
+        ui.add_space(10.0);
+        let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
+        let (w, gap) = (168.0, 12.0);
+        let left = Rect::from_min_size(pos2(row.center().x - w - gap / 2.0, row.top()), vec2(w, 36.0));
+        let right = Rect::from_min_size(pos2(row.center().x + gap / 2.0, row.top()), vec2(w, 36.0));
+        let (gh_brand, gh_ink) = if pal().light {
+            (egui::Color32::from_rgb(36, 41, 47), egui::Color32::WHITE)
+        } else {
+            (egui::Color32::from_rgb(240, 246, 252), egui::Color32::from_rgb(13, 17, 23))
+        };
+        social_button(ui, left, &art.github, "GitHub", PROJECT_URL, gh_brand, gh_ink);
+        social_button(ui, right, &art.discord, "Discord", DISCORD_URL, egui::Color32::from_rgb(88, 101, 242), egui::Color32::WHITE);
     });
     if closed {
         Out::Close

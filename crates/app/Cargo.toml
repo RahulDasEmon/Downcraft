@@ -17,7 +17,7 @@ downcraft-core = { path = "../core" }
 eframe = { version = "0.27", features = ["persistence"] }
 egui_extras = { version = "0.27", features = ["datepicker"] }
 rfd = { version = "0.14", default-features = false, features = ["xdg-portal", "async-std"] }
-image = { version = "0.24", default-features = false, features = ["png"] }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 open = "5"
 # clipboard monitor (text only: no image support needed)

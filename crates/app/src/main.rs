@@ -15,6 +15,9 @@ mod tray;
 mod widgets;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logo-256.png");
+/// White brand glyphs (simple-icons, CC0) for the About page buttons; tinted at draw time.
+const ICON_GITHUB: &[u8] = include_bytes!("../../../assets/icon-github.png");
+const ICON_DISCORD: &[u8] = include_bytes!("../../../assets/icon-discord.png");
 
 fn main() -> eframe::Result<()> {
     // a second launch just raises the running window instead of adding another tray icon

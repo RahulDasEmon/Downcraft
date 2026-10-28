@@ -125,34 +125,61 @@ pub fn wake_window() {}
 /// taskbar button and without taking focus. `rehide()` puts it back exactly as it was.
 #[cfg(windows)]
 pub fn wake_for_dialog() {
-    use windows_sys::Win32::Foundation::RECT;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetWindowLongW, GetWindowRect, IsWindowVisible, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, SWP_NOACTIVATE,
-        SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindowVisible};
     let title: Vec<u16> = "DownCraft\0".encode_utf16().collect();
     unsafe {
         let h = FindWindowW(std::ptr::null(), title.as_ptr());
         if h.is_null() || IsWindowVisible(h) != 0 {
             return;
         }
-        let mut saved = PARKED.lock().unwrap_or_else(|e| e.into_inner());
-        if saved.is_some() {
-            return;
-        }
-        let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-        GetWindowRect(h, &mut r);
-        let style = GetWindowLongW(h, GWL_EXSTYLE);
-        *saved = Some((r.left, r.top, style));
-        WOKEN_HIDDEN.store(true, Ordering::Relaxed);
-        // no taskbar button, never activated, far off-screen - then let it run
-        SetWindowLongW(h, GWL_EXSTYLE, style | (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) as i32);
-        SetWindowPos(h, std::ptr::null_mut(), -32000, -32000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        park(h);
     }
+}
+
+/// The user closed the main window (to the tray) while pop-ups such as "Download complete" or
+/// "About" are still open. The pop-ups are drawn by the main window's update loop, and a hidden
+/// window stops running it, which would leave them frozen: impossible to move, minimise or close.
+/// So the window is parked off-screen instead of hidden; `rehide()` hides it for real once the
+/// last pop-up is gone.
+#[cfg(windows)]
+pub fn park_for_dialogs() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+    let title: Vec<u16> = "DownCraft\0".encode_utf16().collect();
+    unsafe {
+        let h = FindWindowW(std::ptr::null(), title.as_ptr());
+        if !h.is_null() {
+            park(h);
+        }
+    }
+}
+
+/// Moves the window far off-screen (no taskbar button, never activated) but keeps it "visible" to
+/// the OS so that its update loop keeps running. Remembers position and style for `rehide()`.
+#[cfg(windows)]
+unsafe fn park(h: windows_sys::Win32::Foundation::HWND) {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongW, GetWindowRect, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        SWP_SHOWWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    };
+    let mut saved = PARKED.lock().unwrap_or_else(|e| e.into_inner());
+    if saved.is_some() {
+        return; // already parked
+    }
+    let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    GetWindowRect(h, &mut r);
+    let style = GetWindowLongW(h, GWL_EXSTYLE);
+    *saved = Some((r.left, r.top, style));
+    WOKEN_HIDDEN.store(true, Ordering::Relaxed);
+    SetWindowLongW(h, GWL_EXSTYLE, style | (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) as i32);
+    SetWindowPos(h, std::ptr::null_mut(), -32000, -32000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 #[cfg(not(windows))]
 pub fn wake_for_dialog() {}
+
+#[cfg(not(windows))]
+pub fn park_for_dialogs() {}
 
 /// Undoes `wake_for_dialog`: hides the parked window again and restores its style and position.
 #[cfg(windows)]
