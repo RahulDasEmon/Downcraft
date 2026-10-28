@@ -4,6 +4,7 @@ description = "DownCraft – a cross-platform download manager (desktop UI)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "downcraft"

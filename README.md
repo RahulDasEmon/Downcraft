@@ -108,7 +108,7 @@ A *Download complete* dialog gives you **Open**, **Open folder** and **Open with
 
 ### 5 · Make it yours
 
-Six built-in themes, switchable from the **View** menu, plus eight accent colours (Blue, Teal, Green, Orange, Red, Pink, Purple, Yellow).
+Six built-in themes plus eight accent colours (Blue, Teal, Green, Orange, Red, Pink, Purple, Yellow), all on one page: **View → Appearance…**.
 
 <div align="center">
 <table>
@@ -184,7 +184,7 @@ On first start, a **Set up DownCraft** window offers the extension (on Windows a
 
 ## 🛠 Toolbar
 
-One row, everything within reach, IDM-style. Want a different look? **Options → Toolbar icons → Load skin (.zip)…** takes an IDM skin pack, and *Reset* brings the built-in icons back.
+One row, everything within reach, IDM-style. Want a different look? Open **View → Appearance…** and pick a skin from the gallery: **Install** downloads, checks and applies it in one click. *Default* brings the built-in icons back.
 
 <div align="center">
 <table>
@@ -256,7 +256,7 @@ One row, everything within reach, IDM-style. Want a different look? **Options �
 - Per-server connection limits, download quota, duplicate-link handling
 - Site logins (HTTP Basic), proxy with credentials and bypass list
 - IPv4 / IPv6 and outgoing-address choice, timeouts
-- **Toolbar skins:** load an IDM-style skin pack (a `.tbi` plus normal and "hot" `.bmp` strips of 12 icons; 32-bit alpha, or 24-bit with magenta as the transparent colour). It is remembered across restarts.
+- **Toolbar skins:** a skin gallery on the Appearance page (skins and previews live on the [`Toolbar-Skin`](https://github.com/RahulDasEmon/Downcraft/tree/Toolbar-Skin) branch, so new ones need no app update), or load your own IDM-style pack with *Load .zip…* / by dropping it on the page (a `.tbi` plus normal and "hot" `.bmp` strips of 12 icons; 32-bit alpha, or 24-bit with magenta as the transparent colour). Installed skins stay on the PC, and the one in use is remembered across restarts.
 - **Portable mode:** create a `downcraft-data/` folder next to the executable and everything stays with it
 
 </details>
@@ -300,10 +300,36 @@ assets/             logo, toolbar icons, screenshots
 
 MPEG-DASH · FTP · separate HLS audio tracks · custom categories · site grabber · proxy auto-config (PAC) scripts · a separate temporary folder for part files
 
+## 👨‍💻 Developer
+
+<table>
+<tr>
+<td width="150" align="center" valign="middle">
+<a href="https://github.com/RahulDasEmon">
+<img src="https://github.com/RahulDasEmon.png?size=240" width="120" alt="Rahul Das Emon">
+</a>
+</td>
+<td valign="middle">
+
+### Rahul Das Emon
+<sub><b>CREATOR & MAINTAINER OF DOWNCRAFT</b></sub>
+
+Designed and built in Rust, from the segmented download engine to the native UI.<br>
+Found a bug or have an idea? Open an issue or say hello on GitHub.
+
+[![GitHub](https://img.shields.io/badge/GitHub-RahulDasEmon-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RahulDasEmon)
+[![Followers](https://img.shields.io/github/followers/RahulDasEmon?style=for-the-badge&logo=github&label=Follow&color=2b7cd3)](https://github.com/RahulDasEmon)
+
+</td>
+</tr>
+</table>
+
+<sub>The same card lives inside the app: <b>Help → About DownCraft</b>.</sub>
 
 ## ⚖️ Legal
 
-DownCraft is an independent project released under the [MIT license](LICENSE).
+DownCraft is an independent project, not affiliated with Tonec Inc. It contains no IDM code or assets.
+Released under the [MIT license](LICENSE).
 
 ## ⭐ Star history
 

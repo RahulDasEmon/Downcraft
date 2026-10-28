@@ -1,6 +1,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod app;
+mod appearance;
 mod clipboard;
 mod dialogs;
 mod extension;
@@ -8,6 +9,7 @@ mod icons;
 mod options;
 mod single;
 mod skin;
+mod skin_store;
 mod sys;
 mod theme;
 mod titlebar;

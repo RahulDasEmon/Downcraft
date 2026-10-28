@@ -1,7 +1,9 @@
 use crate::{
+    appearance::{appearance_ui, AppearanceDlg},
     clipboard, dialogs::*, icons,
     icons::{Node, Tool},
     options::{options_ui, OptionsDlg},
+    skin_store::SkinStore,
     sys::{self, SoundKind},
     theme::*,
 };
@@ -46,6 +48,7 @@ enum Cmd {
     Extension,
     Tools,
     Setup,
+    Appearance,
     ImportList,
     ExportList,
     Exit,
@@ -138,8 +141,10 @@ pub struct App {
     scheduler: Option<SchedulerDlg>,
     delete: Option<DeleteDlg>,
     about: bool,
-    /// Message shown in a pop-up when a toolbar skin could not be loaded.
-    skin_error: Option<String>,
+    /// The Appearance page (theme, accent colour, toolbar skin).
+    appearance: Option<AppearanceDlg>,
+    /// Online skin gallery + skins saved on this PC.
+    skin_store: Arc<SkinStore>,
     extension: Option<ExtensionDlg>,
     toolbox: Arc<downcraft_core::tools::ToolBox>,
     /// Main window kept above every other window (title-bar pin); `pin_sent` = level already applied at start.
@@ -194,6 +199,7 @@ impl App {
         let after_pending = Arc::new(Mutex::new(None));
         Self::install_event_hook(&mgr, after_pending.clone());
         let toolbox = downcraft_core::tools::ToolBox::new(mgr.clone());
+        let skin_store = SkinStore::new(mgr.clone());
         let pinned = mgr.settings.lock().pin_main;
         let dev = crate::dialogs::AboutArt::new(&cc.egui_ctx, mgr.data_dir().join("developer.png"), crate::LOGO);
         {
@@ -221,7 +227,8 @@ impl App {
             scheduler: None,
             delete: None,
             about: false,
-            skin_error: None,
+            appearance: None,
+            skin_store,
             extension: None,
             toolbox,
             pinned,
@@ -535,6 +542,11 @@ impl App {
                 let _ = open::that("mailto:?subject=DownCraft%20download%20manager&body=Try%20DownCraft%2C%20a%20free%20open-source%20download%20manager%20written%20in%20Rust.");
             }
             Cmd::About => self.about = true,
+            Cmd::Appearance => {
+                if self.appearance.is_none() {
+                    self.appearance = Some(AppearanceDlg::new(&self.skin_store, ctx));
+                }
+            }
             Cmd::Extension => self.extension = Some(ExtensionDlg::new(&self.mgr)),
             Cmd::Tools => {
                 self.toolbox.refresh();
@@ -695,10 +707,6 @@ impl App {
         let any_active = self.mgr.any_active();
         // the menus live in the title bar itself: logo, menus, then the window buttons
         let logo = self.logo.clone();
-        let (cur_theme, cur_accent) = crate::theme::current();
-        let mut pick: (Option<Theme>, Option<Accent>) = (None, None);
-        let skin_now = icons::skin_name();
-        let mut skin_act: Option<bool> = None; // Some(true) = load a .zip, Some(false) = back to default
         let pin_clicked = crate::titlebar::show(ctx, &logo, self.pinned, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().button_padding = vec2(7.0, 2.0);
@@ -743,50 +751,7 @@ impl App {
                     ui.menu_button(mnemonic("View"), |ui| {
                         ui.checkbox(&mut self.show_sidebar, "Categories");
                         ui.separator();
-                        ui.menu_button("Theme", |ui| {
-                            for t in Theme::ALL {
-                                let sw = Palette::build(t, cur_accent);
-                                let r = choice_row(ui, t.name(), t == cur_theme, |p, rc| {
-                                    p.rect_filled(rc, Rounding::same(3.0), sw.menu_bg);
-                                    p.rect_filled(Rect::from_min_max(rc.center(), rc.max - vec2(1.5, 1.5)), Rounding::same(2.0), sw.row_bg);
-                                    p.rect_filled(Rect::from_min_size(rc.min + vec2(3.0, 3.0), vec2(6.0, 2.0)), Rounding::ZERO, sw.text);
-                                    p.rect_stroke(rc, Rounding::same(3.0), Stroke::new(1.0_f32, sw.grid));
-                                });
-                                if r.clicked() {
-                                    pick.0 = Some(t);
-                                    ui.close_menu();
-                                }
-                            }
-                        });
-                        ui.menu_button("Toolbar skin", |ui| {
-                            if choice_row(ui, "Default icons", skin_now.is_none(), |_, _| {}).clicked() {
-                                skin_act = Some(false);
-                                ui.close_menu();
-                            }
-                            if let Some(n) = &skin_now {
-                                choice_row(ui, n, true, |_, _| {});
-                            }
-                            ui.separator();
-                            if choice_row(ui, "Load skin (.zip)…", false, |_, _| {})
-                                .on_hover_text("An IDM toolbar skin: a .zip with a .tbi file and its .bmp icon strips. Applied at once.")
-                                .clicked()
-                            {
-                                skin_act = Some(true);
-                                ui.close_menu();
-                            }
-                        });
-                        ui.menu_button("Accent color", |ui| {
-                            for a in Accent::ALL {
-                                let col = a.colors().0;
-                                let r = choice_row(ui, a.name(), a == cur_accent, |p, rc| {
-                                    p.circle_filled(rc.center(), 7.0, col);
-                                });
-                                if r.clicked() {
-                                    pick.1 = Some(a);
-                                    ui.close_menu();
-                                }
-                            }
-                        });
+                        item(ui, "Appearance…", true, Cmd::Appearance);
                     });
                     ui.menu_button(mnemonic("Help"), |ui| {
                         item(ui, "Tell a Friend", true, Cmd::Friend);
@@ -794,31 +759,6 @@ impl App {
                     });
                 });
         });
-        match skin_act {
-            Some(true) => {
-                if let Some(p) = rfd::FileDialog::new().add_filter("Toolbar skin", &["zip"]).pick_file() {
-                    match crate::skin::import_zip(&p, self.mgr.data_dir()) {
-                        Ok(sk) => icons::set_skin(Some(sk)),
-                        Err(e) => self.skin_error = Some(format!("Could not load the skin: {e}")),
-                    }
-                }
-            }
-            Some(false) => {
-                crate::skin::clear(self.mgr.data_dir());
-                icons::set_skin(None);
-            }
-            None => {}
-        }
-        if pick.0.is_some() || pick.1.is_some() {
-            let (t, a) = (pick.0.unwrap_or(cur_theme), pick.1.unwrap_or(cur_accent));
-            crate::theme::set(ctx, t, a);
-            {
-                let mut st = self.mgr.settings.lock();
-                st.theme = t.key().to_string();
-                st.accent = a.key().to_string();
-            }
-            self.mgr.save_settings();
-        }
         if pin_clicked {
             self.pinned = !self.pinned;
             self.set_level(ctx);
@@ -1474,11 +1414,7 @@ impl App {
                 }
             }
         }
-        if let Some(msg) = self.skin_error.clone() {
-            if let Out::Close = notice_ui(ctx, "Toolbar skin", &msg) {
-                self.skin_error = None;
-            }
-        } else if let Some((title, msg)) = self.notice.clone() {
+        if let Some((title, msg)) = self.notice.clone() {
             if let Out::Close = notice_ui(ctx, &title, &msg) {
                 self.notice = None;
             }
@@ -1513,6 +1449,11 @@ impl App {
         if let Some(mut d) = self.extension.take() {
             if let Out::Keep = extension_ui(ctx, &mut d, &self.logo) {
                 self.extension = Some(d);
+            }
+        }
+        if let Some(mut d) = self.appearance.take() {
+            if let Out::Keep = appearance_ui(ctx, &mut d, &self.mgr, &self.skin_store) {
+                self.appearance = Some(d);
             }
         }
         if let Some(mut d) = self.tools.take() {
@@ -1731,25 +1672,6 @@ fn reqwest_url_invalid(u: &str) -> bool {
     let rest = u.split("://").nth(1).unwrap_or("");
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
     host.is_empty() || host.contains(' ')
-}
-
-/// One entry of a View sub-menu: a 16 px swatch drawn by `swatch`, the name, and a check mark when chosen.
-fn choice_row(ui: &mut Ui, label: &str, selected: bool, swatch: impl FnOnce(&Painter, Rect)) -> Response {
-    let w = ui.available_width().max(170.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 22.0), Sense::click());
-    let p = ui.painter();
-    if resp.hovered() {
-        p.rect_filled(rect.shrink2(vec2(1.0, 0.0)), Rounding::same(3.0), ui.visuals().widgets.hovered.weak_bg_fill);
-    }
-    swatch(p, Rect::from_center_size(pos2(rect.left() + 16.0, rect.center().y), vec2(16.0, 14.0)));
-    p.text(pos2(rect.left() + 32.0, rect.center().y), Align2::LEFT_CENTER, label, FontId::proportional(ui_size() + 0.5), pal().text);
-    if selected {
-        let c = pos2(rect.right() - 14.0, rect.center().y);
-        let st = Stroke::new(1.6_f32, pal().accent);
-        p.line_segment([c + vec2(-3.5, 0.2), c + vec2(-1.0, 2.8)], st);
-        p.line_segment([c + vec2(-1.0, 2.8), c + vec2(3.8, -2.8)], st);
-    }
-    resp
 }
 
 /// Menu-bar title with its first letter underlined, like the Windows access keys in IDM.

@@ -10,6 +10,7 @@ mod merge;
 pub mod ratelimit;
 mod schedule;
 mod settings;
+pub mod skinstore;
 mod task;
 mod transfer;
 pub mod tools;
