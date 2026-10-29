@@ -7,6 +7,7 @@ mod dialogs;
 mod extension;
 mod icons;
 mod options;
+mod setup;
 mod single;
 mod skin;
 mod skin_store;

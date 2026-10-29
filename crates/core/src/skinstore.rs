@@ -5,12 +5,12 @@
 //! ```text
 //! skin.json            the index (see below)
 //! skin/<id>.zip        one skin pack per entry
-//! preview/<id>.jpg     a picture of the toolbar with that skin
+//! preview/<id>.png     a picture of the toolbar with that skin (.png, .jpg or .jpeg)
 //! ```
 //!
 //! `skin.json` is `{ "skins": [ { "id": "neon", "name": "Neon", "author": "…" } ] }` (a bare array
 //! works too). `zip` and `preview` are optional: they default to `skin/<id>.zip` and
-//! `preview/<id>.jpg`. Adding a skin to the gallery is therefore: drop the two files in, add one line
+//! `preview/<id>.png` (then `.jpg`, `.jpeg`: the first one that exists is used). Adding a skin to the gallery is therefore: drop the two files in, add one line
 //! to `skin.json`, push. No new release of the app is needed.
 use serde::Deserialize;
 use std::io::Read;
@@ -33,8 +33,8 @@ pub struct SkinEntry {
     pub author: String,
     /// Full URL of the skin pack.
     pub zip: String,
-    /// Full URL of the preview picture.
-    pub preview: Option<String>,
+    /// Full URLs to try for the preview picture, in order (one when `skin.json` names it).
+    pub previews: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -97,9 +97,12 @@ pub fn parse_index(text: &str) -> Result<Vec<SkinEntry>, String> {
             continue;
         }
         let Some(zip) = resolve(&r.zip.unwrap_or_else(|| format!("skin/{id}.zip"))) else { continue };
-        let preview = resolve(&r.preview.unwrap_or_else(|| format!("preview/{id}.jpg")));
+        let previews: Vec<String> = match r.preview.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+            Some(p) => resolve(p).into_iter().collect(),
+            None => ["png", "jpg", "jpeg"].iter().filter_map(|ext| resolve(&format!("preview/{id}.{ext}"))).collect(),
+        };
         let name = r.name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
-        out.push(SkinEntry { id, name, author: r.author.unwrap_or_default().trim().to_string(), zip, preview });
+        out.push(SkinEntry { id, name, author: r.author.unwrap_or_default().trim().to_string(), zip, previews });
     }
     Ok(out)
 }
@@ -142,11 +145,14 @@ mod tests {
         let a = parse_index(r#"{"skins":[{"id":"neon","name":"Neon","author":"Emon"}]}"#).unwrap();
         assert_eq!(a.len(), 1);
         assert_eq!(a[0].zip, format!("{BASE}skin/neon.zip"));
-        assert_eq!(a[0].preview.as_deref(), Some(format!("{BASE}preview/neon.jpg").as_str()));
+        assert_eq!(a[0].previews.len(), 3);
+        assert_eq!(a[0].previews[0], format!("{BASE}preview/neon.png"));
+        assert!(a[0].previews[1].ends_with("preview/neon.jpg"));
         let b = parse_index(r#"[{"name":"Dark Glass","zip":"skin/dark-glass.zip","preview":"preview/dg.png"}]"#).unwrap();
         assert_eq!(b[0].id, "dark-glass");
         assert_eq!(b[0].name, "Dark Glass");
-        assert!(b[0].preview.as_ref().unwrap().ends_with("preview/dg.png"));
+        assert_eq!(b[0].previews.len(), 1);
+        assert!(b[0].previews[0].ends_with("preview/dg.png"));
     }
 
     #[test]

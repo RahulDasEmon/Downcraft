@@ -159,7 +159,7 @@ fn skin_card(ui: &mut Ui, store: &SkinStore, e: &net::SkinEntry, in_use: bool) -
             let fit = (rect.width() / s.x).min(rect.height() / s.y);
             let img = egui::Rect::from_center_size(rect.center(), s * fit);
             ui.painter().image(tex.id(), img, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-        } else if e.preview.is_some() {
+        } else if !e.previews.is_empty() {
             let (rect, _) = ui.allocate_exact_size(vec2(w, 36.0), Sense::hover());
             ui.painter().rect_filled(rect, Rounding::same(6.0), pal().bare_bg);
             let msg = if store.preview_failed(&e.id) { "No preview" } else { "Loading preview…" };
@@ -324,7 +324,7 @@ pub fn appearance_ui(ctx: &Context, d: &mut AppearanceDlg, mgr: &Arc<Manager>, s
             };
             for id in store.installed_ids() {
                 if !rows.iter().any(|r| r.id == id) {
-                    rows.push(net::SkinEntry { id: id.clone(), name: id, author: String::new(), zip: String::new(), preview: None });
+                    rows.push(net::SkinEntry { id: id.clone(), name: id, author: String::new(), zip: String::new(), previews: Vec::new() });
                 }
             }
             match &catalog {

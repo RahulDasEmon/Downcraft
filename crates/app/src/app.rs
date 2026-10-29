@@ -3,6 +3,7 @@ use crate::{
     clipboard, dialogs::*, icons,
     icons::{Node, Tool},
     options::{options_ui, OptionsDlg},
+    setup::{setup_ui, SetupDlg},
     skin_store::SkinStore,
     sys::{self, SoundKind},
     theme::*,
@@ -45,8 +46,6 @@ enum Cmd {
     StopQueue,
     Friend,
     About,
-    Extension,
-    Tools,
     Setup,
     Appearance,
     ImportList,
@@ -150,7 +149,6 @@ pub struct App {
     /// Main window kept above every other window (title-bar pin); `pin_sent` = level already applied at start.
     pinned: bool,
     pin_sent: bool,
-    tools: Option<ToolsDlg>,
     /// First-run setup window (extension + helper programs) and whether the start-up check has run (0 = waiting for the tool scan, 2 = done).
     setup: Option<SetupDlg>,
     setup_check: u8,
@@ -233,7 +231,6 @@ impl App {
             toolbox,
             pinned,
             pin_sent: false,
-            tools: None,
             setup: None,
             setup_check: 0,
             move_dlg: None,
@@ -547,11 +544,6 @@ impl App {
                     self.appearance = Some(AppearanceDlg::new(&self.skin_store, ctx));
                 }
             }
-            Cmd::Extension => self.extension = Some(ExtensionDlg::new(&self.mgr)),
-            Cmd::Tools => {
-                self.toolbox.refresh();
-                self.tools = Some(ToolsDlg { pinned: true });
-            }
             Cmd::Setup => {
                 self.toolbox.refresh();
                 if self.setup.is_none() {
@@ -720,8 +712,6 @@ impl App {
                     };
                     ui.menu_button(mnemonic("Tasks"), |ui| {
                         item(ui, "Add new download…", true, Cmd::AddUrl);
-                        item(ui, "Browser extension…", true, Cmd::Extension);
-                        item(ui, "Tools (yt-dlp, ffmpeg)…", true, Cmd::Tools);
                         item(ui, "Setup guide…", true, Cmd::Setup);
                         ui.separator();
                         item(ui, "Import downloads…", true, Cmd::ImportList);
@@ -753,10 +743,15 @@ impl App {
                         ui.separator();
                         item(ui, "Appearance…", true, Cmd::Appearance);
                     });
-                    ui.menu_button(mnemonic("Help"), |ui| {
-                        item(ui, "Tell a Friend", true, Cmd::Friend);
-                        item(ui, "About DownCraft", true, Cmd::About);
-                    });
+                    // "About" is a single entry: clicking it opens the About page
+                    let bg = ui.painter().add(Shape::Noop);
+                    let r = ui.add(egui::Button::new(mnemonic("About")).frame(false));
+                    if r.hovered() || r.is_pointer_button_down_on() {
+                        ui.painter().set(bg, Shape::rect_filled(r.rect, Rounding::same(2.0), ui.visuals().widgets.hovered.weak_bg_fill));
+                    }
+                    if r.clicked() {
+                        *cmd = Some(Cmd::About);
+                    }
                 });
         });
         if pin_clicked {
@@ -1456,23 +1451,18 @@ impl App {
                 self.appearance = Some(d);
             }
         }
-        if let Some(mut d) = self.tools.take() {
-            if let Out::Keep = tools_ui(ctx, &mut d, &self.toolbox) {
-                self.tools = Some(d);
-            }
-        }
         if let Some(mut d) = self.setup.take() {
             let out = setup_ui(ctx, &mut d, &self.toolbox, self.mgr.extension_seen(), &self.logo);
+            if std::mem::take(&mut d.changed) {
+                self.mgr.settings.lock().show_setup = !d.hide_at_start;
+                self.mgr.save_settings();
+            }
             if std::mem::take(&mut d.open_extension) && self.extension.is_none() {
                 self.extension = Some(ExtensionDlg::new(&self.mgr));
             }
             match out {
                 Out::Keep => self.setup = Some(d),
-                Out::Done(()) => {
-                    self.mgr.settings.lock().show_setup = false;
-                    self.mgr.save_settings();
-                }
-                Out::Close => {}
+                Out::Done(()) | Out::Close => {}
             }
         }
     }
@@ -1561,9 +1551,9 @@ impl eframe::App for App {
         // yt-dlp, Deno or ffmpeg is missing for a video the browser extension asked about: open Tools
         if self.mgr.take_tools_request() {
             crate::tray::wake_for_dialog();
-            if self.tools.is_none() {
+            if self.setup.is_none() {
                 self.toolbox.refresh();
-                self.tools = Some(ToolsDlg { pinned: true });
+                self.setup = Some(SetupDlg::new(&self.mgr));
             }
         }
 

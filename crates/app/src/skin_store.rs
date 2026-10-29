@@ -130,11 +130,17 @@ impl SkinStore {
             };
             ctx.request_repaint();
             for e in entries {
-                let Some(url) = e.preview.clone() else { continue };
-                if matches!(me.lock().previews.get(&e.id), Some(Preview::Ready(_))) {
+                if e.previews.is_empty() || matches!(me.lock().previews.get(&e.id), Some(Preview::Ready(_))) {
                     continue;
                 }
-                let img = net::fetch(&client, &url, net::MAX_PREVIEW).and_then(|b| decode_preview(&b));
+                // the first candidate (.png, .jpg, .jpeg) that downloads and decodes wins
+                let mut img = Err("no preview".to_string());
+                for url in &e.previews {
+                    img = net::fetch(&client, url, net::MAX_PREVIEW).and_then(|b| decode_preview(&b));
+                    if img.is_ok() {
+                        break;
+                    }
+                }
                 me.lock().previews.insert(e.id.clone(), img.map_or(Preview::Failed, Preview::Ready));
                 ctx.request_repaint();
             }

@@ -5,7 +5,7 @@ every direct media link a page loads (toolbar icon). Clicking sends the link —
 and cookies so protected links work — to the desktop app, which opens *Download File Info*.
 
 ## Install (developer mode)
-**Easiest:** in DownCraft open the **Extension** menu → *Browser extension…*, then drag the logo onto
+**Easiest:** in DownCraft open the **Tasks** menu → *Setup guide…*, then drag the logo onto
 `chrome://extensions` (Developer mode on).
 
 **Manually:**
