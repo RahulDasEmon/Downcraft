@@ -3,7 +3,8 @@
     {
       "id": "neon",
       "name": "Neon",
-      "author": "RahulDasEmon"
+      "author": "RahulDasEmon",
+      "preview": "preview/neon.png"
     }
   ]
 }

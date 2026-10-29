@@ -6,7 +6,7 @@ can be changed without releasing a new version of the app.
 ```
 skin.json            list of skins (what the gallery shows)
 skin/<id>.zip        the skin pack
-preview/<id>.jpg     a picture of the toolbar with that skin (a wide strip is best)
+preview/<id>.png     a picture of the toolbar with that skin (a wide strip is best)
 ```
 
 ## Add a skin
@@ -19,8 +19,8 @@ preview/<id>.jpg     a picture of the toolbar with that skin (a wide strip is be
    { "id": "my-skin", "name": "My Skin", "author": "Your name" }
    ```
 
-   `zip` and `preview` are optional; they default to `skin/<id>.zip` and `preview/<id>.jpg`.
-   Set them only when a file is named differently, e.g. `"preview": "preview/my-skin.png"`.
+   `zip` and `preview` are optional; they default to `skin/<id>.zip` and `preview/<id>.png` (then `.jpg`, `.jpeg`).
+   Set them only when a file is named differently (previews must be .png, .jpg or .jpeg).
 3. Push. The skin shows up in the gallery the next time it is opened (GitHub may cache for a few minutes).
 
 ## What a skin pack is
